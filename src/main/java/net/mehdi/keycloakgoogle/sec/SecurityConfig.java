@@ -23,39 +23,41 @@ import java.util.*;
 @AllArgsConstructor
 @EnableMethodSecurity(prePostEnabled = true)
 public class SecurityConfig {
-    //differnt providers for registration
-    private ClientRegistrationRepository clientRegistrationRepository;
+
+    private final ClientRegistrationRepository clientRegistrationRepository;
+
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         return http
                 .csrf(Customizer.withDefaults())
-                .authorizeHttpRequests(auth->auth.requestMatchers("/","oauthLogin/**").permitAll())
-                .authorizeHttpRequests(auth->auth.anyRequest().authenticated())
-                .oauth2Login(oauth->oauth
-                        .loginPage("/oauthLogin")
-                        .defaultSuccessUrl("/"))
-                .logout((logout)->logout
+                .authorizeHttpRequests(auth -> auth
+                        .requestMatchers("/", "/oauthLogin/**").permitAll()
+                        .anyRequest().authenticated()
+                )
+                .oauth2Login(Customizer.withDefaults()) // Applique la page de login par défaut de oauth2Login
+                .logout(logout -> logout
                         .logoutSuccessHandler(oidcLogoutSuccessHandler())
                         .logoutSuccessUrl("/").permitAll()
-                        .deleteCookies("JSESSIONID"))
-                .exceptionHandling(eh->eh.accessDeniedPage("/notAuthorized"))
+                        .deleteCookies("JSESSIONID")
+                )
+                .exceptionHandling(eh -> eh.accessDeniedPage("/notAuthorized"))
                 .build();
     }
-    //for logout
-    private OidcClientInitiatedLogoutSuccessHandler oidcLogoutSuccessHandler(){
-        final OidcClientInitiatedLogoutSuccessHandler oidcLogoutSuccessHandler=
+
+    private OidcClientInitiatedLogoutSuccessHandler oidcLogoutSuccessHandler() {
+        OidcClientInitiatedLogoutSuccessHandler oidcLogoutSuccessHandler =
                 new OidcClientInitiatedLogoutSuccessHandler(this.clientRegistrationRepository);
         oidcLogoutSuccessHandler.setPostLogoutRedirectUri("{baseUrl}?logoutsuccess=true");
         return oidcLogoutSuccessHandler;
     }
+
     @Bean
     public GrantedAuthoritiesMapper userAuthoritiesMapper() {
-        return (authorities) -> {
-            final Set<GrantedAuthority> mappedAuthorities = new HashSet<>();
-            authorities.forEach((authority) -> {
+        return authorities -> {
+            Set<GrantedAuthority> mappedAuthorities = new HashSet<>();
+            authorities.forEach(authority -> {
                 if (authority instanceof OidcUserAuthority oidcAuth) {
                     mappedAuthorities.addAll(mapAuthorities(oidcAuth.getIdToken().getClaims()));
-                    System.out.println(oidcAuth.getAttributes());
                 } else if (authority instanceof OAuth2UserAuthority oauth2Auth) {
                     mappedAuthorities.addAll(mapAuthorities(oauth2Auth.getAttributes()));
                 }
@@ -65,12 +67,10 @@ public class SecurityConfig {
     }
 
     private List<SimpleGrantedAuthority> mapAuthorities(final Map<String, Object> attributes) {
-        final Map<String, Object> realAccess = ((Map<String, Object>) attributes.getOrDefault("realm_access", Collections.emptyMap()));
-        final Collection<String> roles = ((Collection<String>) realAccess.getOrDefault("roles", Collections.emptyList()));
+        Map<String, Object> realmAccess = (Map<String, Object>) attributes.getOrDefault("realm_access", Collections.emptyMap());
+        Collection<String> roles = (Collection<String>) realmAccess.getOrDefault("roles", Collections.emptyList());
         return roles.stream()
-                .map(role -> new SimpleGrantedAuthority(role))
+                .map(SimpleGrantedAuthority::new)
                 .toList();
     }
-
-
 }
